@@ -1,5 +1,11 @@
 LD_LIBRARY_PATH=./build/
 
+mkdir -p build
+pushd build
+cmake ../
+make
+popd
+
 ./build/trtexec_parallel --deploy=/usr/src/tensorrt/data/mnist/deploy.prototxt --model=/usr/src/tensorrt/data/mnist/mnist.caffemodel --output=prob --batch=16 --saveEngine=mnist16.trt --device=1
 ./build/trtexec_parallel --deploy=/usr/src/tensorrt/data/mnist/deploy.prototxt --model=/usr/src/tensorrt/data/mnist/mnist.caffemodel --output=prob --batch=16 --saveEngine=mnist16.trt --device=2
 echo "Running multi-threaded load"

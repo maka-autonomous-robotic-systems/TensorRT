@@ -99,12 +99,12 @@ int main(int argc, char** argv)
         samplesCommon::loadLibrary(pluginPath);
     }
 
-    if (args.find("loadTwo") != args.end())
+    if (args.find("--loadTwo") != args.end())
     {
         const int first_device = 1;
         const int second_device = 2;
         const std::string original_name = options.build.engine;
-        auto launch_mode = args.find("parallel") != args.end() ? std::launch::async : std::launch::deferred;
+        auto launch_mode = args.find("--parallel") != args.end() ? std::launch::async : std::launch::deferred;
 
         std::vector<std::future<void>> futures;
         futures.push_back(std::async(launch_mode,
