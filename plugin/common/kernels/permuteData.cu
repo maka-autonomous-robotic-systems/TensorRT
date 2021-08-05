@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -65,7 +65,7 @@ pluginStatus_t permuteData_gpu(
     return STATUS_SUCCESS;
 }
 
-// permuteData LAUNCH CONFIG 
+// permuteData LAUNCH CONFIG
 typedef pluginStatus_t (*pdFunc)(cudaStream_t,
                               const int,
                               const int,
@@ -95,8 +95,10 @@ struct pdLaunchConfig
     }
 };
 
-static std::array<pdLaunchConfig, 1> pdLCOptions = {
-  pdLaunchConfig(DataType::kFLOAT, permuteData_gpu<float>)};
+static std::array<pdLaunchConfig, 2> pdLCOptions = {
+  pdLaunchConfig(DataType::kFLOAT, permuteData_gpu<float>),
+  pdLaunchConfig(DataType::kHALF, permuteData_gpu<__half>)
+};
 
 pluginStatus_t permuteData(cudaStream_t stream,
                         const int nthreads,
@@ -126,4 +128,3 @@ pluginStatus_t permuteData(cudaStream_t stream,
     }
     return STATUS_BAD_PARAM;
 }
-

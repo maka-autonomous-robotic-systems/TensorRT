@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -98,31 +98,33 @@ extern unsigned char fused_multihead_attention_int8_384_64_kernel_sm80_cu_o[];
 extern unsigned char fused_multihead_attention_int8_128_64_kernel_sm80_cu_o[];
 extern unsigned char fused_multihead_attention_fp16_128_64_kernel_sm80_cu_o[];
 extern unsigned char fused_multihead_attention_fp16_384_64_kernel_sm80_cu_o[];
+extern unsigned char fused_multihead_attention_fp16_384_64_kernel_sm86_cu_o[];
 
-extern unsigned int fused_multihead_attention_fp16_64_64_kernel_sm75_cu_o_len;
-extern unsigned int fused_multihead_attention_fp16_96_64_kernel_sm75_cu_o_len;
-extern unsigned int fused_multihead_attention_fp16_64_64_kernel_sm80_cu_o_len;
-extern unsigned int fused_multihead_attention_fp16_96_64_kernel_sm80_cu_o_len;
-extern unsigned int fused_multihead_attention_fp16_128_64_kernel_sm75_cu_o_len;
-extern unsigned int fused_multihead_attention_fp16_384_64_kernel_sm75_cu_o_len;
-extern unsigned int fused_multihead_attention_int8_128_64_kernel_sm75_cu_o_len;
-extern unsigned int fused_multihead_attention_int8_384_64_kernel_sm75_cu_o_len;
-extern unsigned int fused_multihead_attention_int8_384_64_kernel_sm80_cu_o_len;
-extern unsigned int fused_multihead_attention_int8_128_64_kernel_sm80_cu_o_len;
-extern unsigned int fused_multihead_attention_fp16_128_64_kernel_sm80_cu_o_len;
-extern unsigned int fused_multihead_attention_fp16_384_64_kernel_sm80_cu_o_len;
+extern uint32_t fused_multihead_attention_fp16_64_64_kernel_sm75_cu_o_len;
+extern uint32_t fused_multihead_attention_fp16_96_64_kernel_sm75_cu_o_len;
+extern uint32_t fused_multihead_attention_fp16_64_64_kernel_sm80_cu_o_len;
+extern uint32_t fused_multihead_attention_fp16_96_64_kernel_sm80_cu_o_len;
+extern uint32_t fused_multihead_attention_fp16_128_64_kernel_sm75_cu_o_len;
+extern uint32_t fused_multihead_attention_fp16_384_64_kernel_sm75_cu_o_len;
+extern uint32_t fused_multihead_attention_int8_128_64_kernel_sm75_cu_o_len;
+extern uint32_t fused_multihead_attention_int8_384_64_kernel_sm75_cu_o_len;
+extern uint32_t fused_multihead_attention_int8_384_64_kernel_sm80_cu_o_len;
+extern uint32_t fused_multihead_attention_int8_128_64_kernel_sm80_cu_o_len;
+extern uint32_t fused_multihead_attention_fp16_128_64_kernel_sm80_cu_o_len;
+extern uint32_t fused_multihead_attention_fp16_384_64_kernel_sm80_cu_o_len;
+extern uint32_t fused_multihead_attention_fp16_384_64_kernel_sm86_cu_o_len;
 
 static const struct FusedMultiHeadAttentionKernelMetaInfoV1
 {
     Data_type mDataType;
-    unsigned int mS;
-    unsigned int mD;
-    unsigned int mSM;
+    uint32_t mS;
+    uint32_t mD;
+    uint32_t mSM;
     const unsigned char* mCubin;
-    unsigned int mCubinSize;
+    uint32_t mCubinSize;
     const char* mFuncName;
-    unsigned int mSharedMemBytes;
-    unsigned int mThreadsPerCTA;
+    uint32_t mSharedMemBytes;
+    uint32_t mThreadsPerCTA;
 } sMhaKernelMetaInfos[] = {
     // Turing
     {DATA_TYPE_FP16, 64, 64, kSM_75, fused_multihead_attention_fp16_64_64_kernel_sm75_cu_o,
@@ -175,6 +177,9 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV1
     {DATA_TYPE_FP16, 128, 64, kSM_86, fused_multihead_attention_fp16_128_64_kernel_sm80_cu_o,
         fused_multihead_attention_fp16_128_64_kernel_sm80_cu_o_len, "fused_multihead_attention_fp16_128_64_kernel_sm80",
         49152, 128},
+    {DATA_TYPE_FP16, 384, 64, kSM_86, fused_multihead_attention_fp16_384_64_kernel_sm86_cu_o,
+        fused_multihead_attention_fp16_384_64_kernel_sm86_cu_o_len, "fused_multihead_attention_fp16_384_64_kernel_sm80",
+        65536, 256},
     {DATA_TYPE_INT8, 128, 64, kSM_86, fused_multihead_attention_int8_128_64_kernel_sm80_cu_o,
         fused_multihead_attention_int8_128_64_kernel_sm80_cu_o_len, "fused_multihead_attention_int8_128_64_kernel_sm80",
         24576, 128},
@@ -191,7 +196,7 @@ class TFusedMultiHeadAttentionXMMAKernel
 public:
     using KernelMeta = TKernelMeta;
     using KernelParam = TKernelParam;
-    inline uint64_t hashID(unsigned int s, unsigned int d) const
+    inline uint64_t hashID(uint32_t s, uint32_t d) const
     {
         return (uint64_t) s << 32 | d;
     }
@@ -200,8 +205,7 @@ public:
         return hashID(kernelMeta.mS, kernelMeta.mD);
     }
 
-    TFusedMultiHeadAttentionXMMAKernel(
-        const TKernelMeta* pMetaStart, unsigned int nMetaCount, Data_type type, unsigned int sm)
+    TFusedMultiHeadAttentionXMMAKernel(const TKernelMeta* pMetaStart, uint32_t nMetaCount, Data_type type, uint32_t sm)
         : mDataType(type)
         , mKernelMeta(pMetaStart)
         , mKernelMetaCount(nMetaCount)
@@ -216,7 +220,7 @@ public:
             return;
         }
 
-        for (unsigned int i = 0; i < mKernelMetaCount; ++i)
+        for (uint32_t i = 0; i < mKernelMetaCount; ++i)
         {
             const auto& kernelMeta = mKernelMeta[i];
             if (kernelMeta.mSM == mSM && kernelMeta.mDataType == mDataType)
@@ -276,12 +280,12 @@ protected:
 
     Data_type mDataType;
     const TKernelMeta* mKernelMeta;
-    unsigned int mKernelMetaCount;
-    unsigned int mSM;
+    uint32_t mKernelMetaCount;
+    uint32_t mSM;
     std::unordered_map<const unsigned char*, CUmodule> mModules;
     struct FusedMultiHeadAttentionKernelInfo
     {
-        unsigned int mMetaInfoIndex;
+        uint32_t mMetaInfoIndex;
         CUfunction mDeviceFunction;
     };
     std::unordered_map<uint64_t, FusedMultiHeadAttentionKernelInfo> mFunctions;
@@ -292,8 +296,8 @@ template <typename TFusedMHAKernelList>
 class TFusedMHAKernelFactory
 {
 public:
-    const TFusedMHAKernelList* getXMMAKernels(const typename TFusedMHAKernelList::KernelMeta* pKernelList,
-        unsigned int nbKernels, Data_type type, unsigned int sm)
+    const TFusedMHAKernelList* getXMMAKernels(
+        const typename TFusedMHAKernelList::KernelMeta* pKernelList, uint32_t nbKernels, Data_type type, uint32_t sm)
     {
         static std::mutex s_mutex;
         std::lock_guard<std::mutex> lg(s_mutex);
@@ -319,9 +323,16 @@ public:
 private:
     TFusedMHAKernelFactory() = default;
 
-    inline uint64_t hashID(Data_type type, unsigned int sm) const
+    inline uint64_t hashID(Data_type type, uint32_t sm) const
     {
-        return (uint64_t) type << 32 | sm;
+        // use deviceID in hasID for multi GPU support before driver support context-less loading of cubin
+        int32_t deviceID{0};
+        cudaGetDevice(&deviceID);
+
+        ASSERT((deviceID & 0xFFFF) == deviceID);
+        ASSERT((type & 0xFFFF) == type);
+        ASSERT((sm & 0xFFFFFFFF) == sm);
+        return (uint64_t) type << 48 | (uint64_t) deviceID << 32 | sm;
     }
 
     std::unordered_map<uint64_t, const std::unique_ptr<TFusedMHAKernelList>> mKernels;
@@ -331,7 +342,7 @@ using FusedMultiHeadAttentionXMMAKernel
     = TFusedMultiHeadAttentionXMMAKernel<FusedMultiHeadAttentionKernelMetaInfoV1, Fused_multihead_attention_params>;
 using FusedMHAKernelFactory = TFusedMHAKernelFactory<FusedMultiHeadAttentionXMMAKernel>;
 
-inline const FusedMultiHeadAttentionXMMAKernel* getXMMAKernels(Data_type type, unsigned int sm)
+inline const FusedMultiHeadAttentionXMMAKernel* getXMMAKernels(Data_type type, uint32_t sm)
 {
     return FusedMHAKernelFactory::Get().getXMMAKernels(
         sMhaKernelMetaInfos, sizeof(sMhaKernelMetaInfos) / sizeof(sMhaKernelMetaInfos[0]), type, sm);

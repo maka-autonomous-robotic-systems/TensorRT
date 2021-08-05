@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
+#include "common.h"
 #include "vocabulary.h"
-#include <assert.h>
 #include <clocale>
 #include <iostream>
 #include <istream>
@@ -33,7 +33,7 @@ Vocabulary::Vocabulary()
 
 void Vocabulary::add(const std::string& token)
 {
-    assert(mTokenToId.find(token) == mTokenToId.end());
+    ASSERT(mTokenToId.find(token) == mTokenToId.end());
     mTokenToId[token] = mNumTokens;
     mIdToToken.push_back(token);
     mNumTokens++;
@@ -49,7 +49,7 @@ int Vocabulary::getId(const std::string& token) const
 
 std::string Vocabulary::getToken(int id) const
 {
-    assert(id < mNumTokens);
+    ASSERT(id < mNumTokens);
     return mIdToToken[id];
 }
 
@@ -71,19 +71,19 @@ std::istream& operator>>(std::istream& input, Vocabulary& value)
 
     {
         auto it = value.mTokenToId.find(Vocabulary::mSosStr);
-        assert(it != value.mTokenToId.end());
+        ASSERT(it != value.mTokenToId.end());
         value.mSosId = it->second;
     }
 
     {
         auto it = value.mTokenToId.find(Vocabulary::mEosStr);
-        assert(it != value.mTokenToId.end());
+        ASSERT(it != value.mTokenToId.end());
         value.mEosId = it->second;
     }
 
     {
         auto it = value.mTokenToId.find(Vocabulary::mUnkStr);
-        assert(it != value.mTokenToId.end());
+        ASSERT(it != value.mTokenToId.end());
         value.mUnkId = it->second;
     }
 

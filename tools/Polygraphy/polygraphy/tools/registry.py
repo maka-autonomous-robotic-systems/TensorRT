@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,24 +13,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.tools.base import Tool
-from polygraphy.logger import G_LOGGER
 import importlib
 
-try:
-    ModuleNotFoundError
-except:
-    ModuleNotFoundError = ImportError
+from polygraphy.logger import G_LOGGER
+from polygraphy.tools.base import Tool
 
 TOOL_REGISTRY = []
 
 
 class MissingTool(Tool):
     def __init__(self, name, err):
-        self.name = name
-        self.__doc__ = "Error: Tool could not be loaded. Run 'polygraphy {:}' for details".format(self.name)
+        super().__init__(name)
         self.err = err
-
+        # NOTE: When modifying this error message, make sure to update the checks in
+        # tests/test_public_imports.py so that we don't miss errors!
+        self.__doc__ = (
+            "[!] This tool could not be loaded due to an error:\n{:}\nRun 'polygraphy {:}' for details.".format(
+                self.err, self.name
+            )
+        )
 
     def __call__(self, args):
         G_LOGGER.critical("Encountered an error when loading this tool:\n{:}".format(self.err))
@@ -41,13 +42,22 @@ def try_register_tool(module, tool_class):
 
     try:
         toolmod = importlib.import_module(module)
-        tool = getattr(toolmod, tool_class)()
-        TOOL_REGISTRY.append(tool)
+        ToolClass = getattr(toolmod, tool_class)
+        TOOL_REGISTRY.append(ToolClass())
     except Exception as err:
         TOOL_REGISTRY.append(MissingTool(tool_class.lower(), err=err))
 
 
 try_register_tool("polygraphy.tools.run", "Run")
+try_register_tool("polygraphy.tools.convert", "Convert")
 try_register_tool("polygraphy.tools.inspect", "Inspect")
 try_register_tool("polygraphy.tools.surgeon", "Surgeon")
-try_register_tool("polygraphy.tools.precision", "Precision")
+try_register_tool("polygraphy.tools.template", "Template")
+try_register_tool("polygraphy.tools.debug", "Debug")
+try_register_tool("polygraphy.tools.to_json", "ToJSON")
+
+# Check that tool names are unique
+tool_names = [tool.name for tool in TOOL_REGISTRY]
+duplicates = {name for name in tool_names if tool_names.count(name) > 1}
+if duplicates:
+    G_LOGGER.internal_error("Multiple tools have the same name. Duplicate tool names found: {:}".format(duplicates))

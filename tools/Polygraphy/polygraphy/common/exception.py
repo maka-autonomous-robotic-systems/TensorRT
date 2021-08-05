@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,8 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-class PolygraphyException(Exception):
-    """
-    Represents an exception raised by Polygraphy.
-    """
-    pass
+from polygraphy import mod
+from polygraphy.exception import *
+
+mod.warn_deprecated("polygraphy.common.exception", "polygraphy.exception", remove_in="0.32.0")

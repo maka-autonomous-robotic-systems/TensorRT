@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,26 +19,36 @@
 This script runs an identity model with ONNX-Runtime and TensorRT,
 then compares outputs.
 """
-from polygraphy.backend.trt import NetworkFromOnnxBytes, EngineFromNetwork, TrtRunner
-from polygraphy.backend.onnxrt import OnnxrtRunner, SessionFromOnnxBytes
-from polygraphy.backend.common import BytesFromPath
+from polygraphy.backend.onnxrt import OnnxrtRunner, SessionFromOnnx
+from polygraphy.backend.trt import EngineFromNetwork, NetworkFromOnnxPath, TrtRunner
 from polygraphy.comparator import Comparator
 
-import os
 
-# Create loaders for both ONNX Runtime and TensorRT
-MODEL = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, "models", "identity.onnx")
+def main():
+    # The OnnxrtRunner requires an ONNX-RT session.
+    # We can use the SessionFromOnnx lazy loader to construct one easily:
+    build_onnxrt_session = SessionFromOnnx("identity.onnx")
 
-load_serialized_onnx = BytesFromPath(MODEL)
-build_onnxrt_session = SessionFromOnnxBytes(load_serialized_onnx)
-build_engine = EngineFromNetwork(NetworkFromOnnxBytes(load_serialized_onnx))
+    # The TrtRunner requires a TensorRT engine.
+    # To create one from the ONNX model, we can chain a couple lazy loaders together:
+    build_engine = EngineFromNetwork(NetworkFromOnnxPath("identity.onnx"))
 
-# Create runners
-runners = [
-    TrtRunner(build_engine),
-    OnnxrtRunner(build_onnxrt_session),
-]
+    runners = [
+        TrtRunner(build_engine),
+        OnnxrtRunner(build_onnxrt_session),
+    ]
 
-# Finally, run and compare the results.
-run_results = Comparator.run(runners)
-assert bool(Comparator.compare_accuracy(run_results))
+    # `Comparator.run()` will run each runner separately using synthetic input data and return a `RunResults` instance.
+    # See `polygraphy/comparator/struct.py` for details.
+    run_results = Comparator.run(runners)
+
+    # `Comparator.compare_accuracy()` checks that outputs match between runners.
+    assert bool(Comparator.compare_accuracy(run_results))
+
+    # We can use `RunResults.save()` method to save the inference results to a JSON file.
+    # This can be useful if you want to generate and compare results separately.
+    run_results.save("inference_results.json")
+
+
+if __name__ == "__main__":
+    main()

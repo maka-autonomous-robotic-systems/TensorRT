@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -59,7 +59,7 @@ void printPerformanceProfile(const ReportingOptions& reporting, const InferenceE
     }
 }
 
-void printOutput(const ReportingOptions& reporting, const InferenceEnvironment& iEnv, std::ostream& os)
+void printOutput(const ReportingOptions& reporting, const InferenceEnvironment& iEnv, std::ostream& os, int32_t batch)
 {
     if (reporting.output)
     {
@@ -67,7 +67,7 @@ void printOutput(const ReportingOptions& reporting, const InferenceEnvironment& 
     }
     if (!reporting.exportOutput.empty())
     {
-        exportJSONOutput(*iEnv.context.front(), *iEnv.bindings.front(), reporting.exportOutput);
+        exportJSONOutput(*iEnv.context.front(), *iEnv.bindings.front(), reporting.exportOutput, batch);
     }
 }
 
@@ -136,6 +136,7 @@ int main(int argc, char** argv)
     setCudaDevice(options.system.device, sample::gLogInfo);
     sample::gLogInfo << std::endl;
 
+    sample::gLogInfo << "TensorRT version: " << getInferLibVersion() << std::endl;
     initLibNvInferPlugins(&sample::gLogger.getTRTLogger(), "");
 
     for (const auto& pluginPath : options.system.plugins)
@@ -145,25 +146,57 @@ int main(int argc, char** argv)
     }
 
     InferenceEnvironment iEnv;
-    time_point buildStartTime{std::chrono::high_resolution_clock::now()};
-    iEnv.engine = getEngine(options.model, options.build, options.system, sample::gLogError);
-    time_point buildEndTime{std::chrono::high_resolution_clock::now()};
+    TrtUniquePtr<INetworkDefinition> networkForRefit;
+    Parser parserHoldingWeightsMem;
+    const time_point buildStartTime{std::chrono::high_resolution_clock::now()};
+    std::tie(iEnv.engine, networkForRefit, parserHoldingWeightsMem) = getEngineNetworkParserTuple(options.model, options.build, options.system, sample::gLogError);
+    const time_point buildEndTime{std::chrono::high_resolution_clock::now()};
     if (iEnv.engine)
     {
-        sample::gLogInfo << "Engine " << (options.build.load ? "loaded" : "built") << " in "
-                         << duration(buildEndTime - buildStartTime).count() << " sec." << std::endl;
+        sample::gLogInfo << "Engine " << (options.build.load ? "loaded" : "built")
+            << " in " << duration(buildEndTime - buildStartTime).count() << " sec." << std::endl;
     }
     else
     {
         sample::gLogError << "Engine set up failed" << std::endl;
         return sample::gLogger.reportFail(sampleTest);
     }
-
-    if (iEnv.engine.get()->isRefittable() && options.reporting.refit)
+    if (iEnv.engine.get()->isRefittable())
     {
-        dumpRefittable(*iEnv.engine.get());
+        if (options.reporting.refit)
+        {
+            dumpRefittable(*iEnv.engine.get());
+        }
+        if (options.inference.timeRefit)
+        {
+            if (networkForRefit.operator bool())
+            {
+                const bool success = timeRefit(*networkForRefit, *iEnv.engine);
+                if (!success)
+                {
+                    sample::gLogError << "Engine refit failed." << std::endl;
+                    return sample::gLogger.reportFail(sampleTest);
+                }
+            }
+            else
+            {
+                sample::gLogWarning << "Network not available, skipped timing refit." << std::endl;
+            }
+        }
     }
+    // release resources for refit only.
+    parserHoldingWeightsMem = Parser{};
+    // network released after parser! parser destructor depends on network.
+    networkForRefit.reset();
 
+    if (options.inference.timeDeserialize)
+    {
+        if (timeDeserialize(iEnv))
+        {
+            return sample::gLogger.reportFail(sampleTest);
+        }
+        return sample::gLogger.reportPass(sampleTest);
+    }
     if (options.inference.skip)
     {
         return sample::gLogger.reportPass(sampleTest);
@@ -181,6 +214,13 @@ int main(int argc, char** argv)
     if ((options.reporting.profile || !options.reporting.exportProfile.empty()) && !options.inference.rerun)
     {
         iEnv.profiler.reset(new Profiler);
+        if (options.inference.graph)
+        {
+            options.inference.graph = false;
+            sample::gLogWarning << "Profiler does not work when CUDA graph is enabled. Ignored --useCudaGraph flag "
+                                   "and disabled CUDA graph."
+                                << std::endl;
+        }
     }
 
     if (!setUpInference(iEnv, options.inference))
@@ -190,18 +230,34 @@ int main(int argc, char** argv)
     }
     std::vector<InferenceTrace> trace;
     sample::gLogInfo << "Starting inference" << std::endl;
-    runInference(options.inference, iEnv, options.system.device, trace);
+
+    if (!runInference(options.inference, iEnv, options.system.device, trace))
+    {
+        sample::gLogError << "Error occurred during inference" << std::endl;
+        return sample::gLogger.reportFail(sampleTest);
+    }
 
     printPerformanceReport(trace, options.reporting, static_cast<float>(options.inference.warmup),
-        options.inference.batch, sample::gLogInfo);
-    printOutput(options.reporting, iEnv, sample::gLogInfo);
+        options.inference.batch, sample::gLogInfo, sample::gLogWarning, sample::gLogVerbose);
+    printOutput(options.reporting, iEnv, sample::gLogInfo, options.inference.batch);
 
     if ((options.reporting.profile || !options.reporting.exportProfile.empty()) && options.inference.rerun)
     {
         auto* profiler = new Profiler;
         iEnv.profiler.reset(profiler);
         iEnv.context.front()->setProfiler(profiler);
-        runInference(options.inference, iEnv, options.system.device, trace);
+        if (options.inference.graph)
+        {
+            options.inference.graph = false;
+            sample::gLogWarning << "Profiler does not work when CUDA graph is enabled. Ignored --useCudaGraph flag "
+                                   "and disabled CUDA graph in the second run with the profiler."
+                                << std::endl;
+        }
+        if (!runInference(options.inference, iEnv, options.system.device, trace))
+        {
+            sample::gLogError << "Error occurred during inference" << std::endl;
+            return sample::gLogger.reportFail(sampleTest);
+        }
     }
     printPerformanceProfile(options.reporting, iEnv, sample::gLogInfo);
 

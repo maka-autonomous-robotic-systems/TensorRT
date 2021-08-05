@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,9 +33,9 @@ namespace bert
 // Clip plugin specific constants
 namespace
 {
-static const char* SKIP_LAYER_NORM_VERSION{"1"};
-static const char* SKIP_LAYER_NORM_NAME{"CustomSkipLayerNormPluginDynamic"};
-static const char* SKIP_LAYER_NORM_VAR_SEQLEN_VERSION{"2"};
+const char* SKIP_LAYER_NORM_VERSION{"1"};
+const char* SKIP_LAYER_NORM_NAME{"CustomSkipLayerNormPluginDynamic"};
+const char* SKIP_LAYER_NORM_VAR_SEQLEN_VERSION{"2"};
 } // namespace
 
 // Static class fields initialization
@@ -48,8 +48,7 @@ std::vector<PluginField> SkipLayerNormVarSeqlenPluginCreator::mPluginAttributes;
 REGISTER_TENSORRT_PLUGIN(SkipLayerNormPluginDynamicCreator);
 REGISTER_TENSORRT_PLUGIN(SkipLayerNormVarSeqlenPluginCreator);
 
-
-static inline DataType getParamWordType(DataType cfgType)
+static inline DataType getParamWordType(DataType cfgType) noexcept
 {
     if (cfgType == DataType::kINT8)
     {
@@ -111,18 +110,18 @@ SkipLayerNormPluginDynamic::SkipLayerNormPluginDynamic(const std::string name, c
 }
 
 // IPluginV2DynamicExt Methods
-IPluginV2DynamicExt* SkipLayerNormPluginDynamic::clone() const
+IPluginV2DynamicExt* SkipLayerNormPluginDynamic::clone() const noexcept
 {
     gLogVerbose << "SkipLayerNormPluginDynamic clone\n";
 
-    auto p = new SkipLayerNormPluginDynamic(mLayerName, mType, mLd, mBeta, mGamma, mBias);
+    auto* p = new SkipLayerNormPluginDynamic(mLayerName, mType, mLd, mBeta, mGamma, mBias);
     p->initialize();
     p->setPluginNamespace(mNamespace.c_str());
     return p;
 }
 
 DimsExprs SkipLayerNormPluginDynamic::getOutputDimensions(
-    int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder)
+    int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder) noexcept
 {
     assert(nbInputs == 2);
     assert(outputIndex == 0);
@@ -131,7 +130,7 @@ DimsExprs SkipLayerNormPluginDynamic::getOutputDimensions(
 }
 
 bool SkipLayerNormPluginDynamic::supportsFormatCombination(
-    int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs)
+    int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept
 {
     assert(nbInputs == 2);
     assert(nbOutputs == 1);
@@ -166,7 +165,7 @@ bool SkipLayerNormPluginDynamic::supportsFormatCombination(
 }
 
 void SkipLayerNormPluginDynamic::configurePlugin(
-    const DynamicPluginTensorDesc* inputs, int nbInputs, const DynamicPluginTensorDesc* outputs, int nbOutputs)
+    const DynamicPluginTensorDesc* inputs, int nbInputs, const DynamicPluginTensorDesc* outputs, int nbOutputs) noexcept
 {
     gLogVerbose << "SkipLayerNormPluginDynamic configurePlugin\n";
 
@@ -209,13 +208,13 @@ void SkipLayerNormPluginDynamic::configurePlugin(
 }
 
 size_t SkipLayerNormPluginDynamic::getWorkspaceSize(
-    const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const
+    const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const noexcept
 {
     return 0;
 }
 
 int SkipLayerNormPluginDynamic::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
-    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream)
+    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     const int inputVolume = volume(inputDesc[0].dims);
     int status = -1;
@@ -225,16 +224,16 @@ int SkipLayerNormPluginDynamic::enqueue(const PluginTensorDesc* inputDesc, const
     // Launch CUDA kernel wrapper and save its return value
     if (iType == DataType::kFLOAT)
     {
-        const auto input = static_cast<const float*>(inputs[0]);
-        const auto skip = static_cast<const float*>(inputs[1]);
-        auto output = static_cast<float*>(outputs[0]);
-        const auto bias = static_cast<const float*>(mBiasDev.get());
-        const auto beta = static_cast<const float*>(mBetaDev.get());
-        const auto gamma = static_cast<const float*>(mGammaDev.get());
+        const auto* const input = static_cast<const float*>(inputs[0]);
+        const auto* const skip = static_cast<const float*>(inputs[1]);
+        auto* output = static_cast<float*>(outputs[0]);
+        const auto* const bias = static_cast<const float*>(mBiasDev.get());
+        const auto* const beta = static_cast<const float*>(mBetaDev.get());
+        const auto* const gamma = static_cast<const float*>(mGammaDev.get());
         if (mHasBias)
         {
-            status
-                = computeSkipLayerNorm<float, true>(stream, static_cast<int>(mLd), inputVolume, input, skip, beta, gamma, output, bias);
+            status = computeSkipLayerNorm<float, true>(
+                stream, static_cast<int>(mLd), inputVolume, input, skip, beta, gamma, output, bias);
         }
         else
         {
@@ -244,15 +243,16 @@ int SkipLayerNormPluginDynamic::enqueue(const PluginTensorDesc* inputDesc, const
     }
     else if (iType == DataType::kHALF)
     {
-        const auto input = static_cast<const half*>(inputs[0]);
-        const auto skip = static_cast<const half*>(inputs[1]);
-        auto output = static_cast<half*>(outputs[0]);
-        const auto bias = static_cast<const half*>(mBiasDev.get());
-        const auto beta = static_cast<const half*>(mBetaDev.get());
-        const auto gamma = static_cast<const half*>(mGammaDev.get());
+        const auto* const input = static_cast<const half*>(inputs[0]);
+        const auto* const skip = static_cast<const half*>(inputs[1]);
+        auto* output = static_cast<half*>(outputs[0]);
+        const auto* const bias = static_cast<const half*>(mBiasDev.get());
+        const auto* const beta = static_cast<const half*>(mBetaDev.get());
+        const auto* const gamma = static_cast<const half*>(mGammaDev.get());
         if (mHasBias)
         {
-            status = computeSkipLayerNorm<half, true>(stream, static_cast<int>(mLd), inputVolume, input, skip, beta, gamma, output, bias);
+            status = computeSkipLayerNorm<half, true>(
+                stream, static_cast<int>(mLd), inputVolume, input, skip, beta, gamma, output, bias);
         }
         else
         {
@@ -264,17 +264,17 @@ int SkipLayerNormPluginDynamic::enqueue(const PluginTensorDesc* inputDesc, const
     {
         const float dqScaleIn = inputDesc[0].scale;
         const float dqScaleSkip = inputDesc[1].scale;
-        const float qScale = 1.f / outputDesc[0].scale;
-        const auto input = static_cast<const int8_t*>(inputs[0]);
-        const auto skip = static_cast<const int8_t*>(inputs[1]);
-        auto output = static_cast<int8_t*>(outputs[0]);
-        const auto bias = static_cast<const half*>(mBiasDev.get());
-        const auto beta = static_cast<const half*>(mBetaDev.get());
-        const auto gamma = static_cast<const half*>(mGammaDev.get());
+        const float qScale = 1.F / outputDesc[0].scale;
+        const auto* const input = static_cast<const int8_t*>(inputs[0]);
+        const auto* const skip = static_cast<const int8_t*>(inputs[1]);
+        auto* output = static_cast<int8_t*>(outputs[0]);
+        const auto* const bias = static_cast<const half*>(mBiasDev.get());
+        const auto* const beta = static_cast<const half*>(mBetaDev.get());
+        const auto* const gamma = static_cast<const half*>(mGammaDev.get());
         if (mHasBias)
         {
-            status = computeSkipLayerNormDQQ<true>(
-                stream, static_cast<int>(mLd), inputVolume, input, skip, beta, gamma, output, bias, dqScaleIn, dqScaleSkip, qScale);
+            status = computeSkipLayerNormDQQ<true>(stream, static_cast<int>(mLd), inputVolume, input, skip, beta, gamma,
+                output, bias, dqScaleIn, dqScaleSkip, qScale);
         }
         else
         {
@@ -291,7 +291,7 @@ int SkipLayerNormPluginDynamic::enqueue(const PluginTensorDesc* inputDesc, const
 }
 
 // IPluginV2Ext Methods
-DataType SkipLayerNormPluginDynamic::getOutputDataType(int index, const DataType* inputTypes, int nbInputs) const
+DataType SkipLayerNormPluginDynamic::getOutputDataType(int index, const DataType* inputTypes, int nbInputs) const noexcept
 {
     assert(index == 0);
     assert(nbInputs == 2);
@@ -299,38 +299,38 @@ DataType SkipLayerNormPluginDynamic::getOutputDataType(int index, const DataType
 }
 
 // IPluginV2 Methods
-const char* SkipLayerNormPluginDynamic::getPluginType() const
+const char* SkipLayerNormPluginDynamic::getPluginType() const noexcept
 {
     return SKIP_LAYER_NORM_NAME;
 }
 
-const char* SkipLayerNormPluginDynamic::getPluginVersion() const
+const char* SkipLayerNormPluginDynamic::getPluginVersion() const noexcept
 {
     return SKIP_LAYER_NORM_VERSION;
 }
 
-int SkipLayerNormPluginDynamic::getNbOutputs() const
+int SkipLayerNormPluginDynamic::getNbOutputs() const noexcept
 {
     return 1;
 }
-int SkipLayerNormPluginDynamic::initialize()
+int SkipLayerNormPluginDynamic::initialize() noexcept
 {
     gLogVerbose << "SkipLayerNormPluginDynamic initialize\n";
     return 0;
 }
 
-void SkipLayerNormPluginDynamic::terminate()
+void SkipLayerNormPluginDynamic::terminate() noexcept
 {
     gLogVerbose << "SkipLayerNormPluginDynamic terminate\n";
 }
 
-size_t SkipLayerNormPluginDynamic::getSerializationSize() const
+size_t SkipLayerNormPluginDynamic::getSerializationSize() const noexcept
 {
     const size_t biasSize = mHasBias ? (mLd * mParamWordsize) : 0;
     return 2 * mParamWordsize * mLd + 2 * sizeof(DataType) + sizeof(mLd) + biasSize + sizeof(mHasBias);
 }
 
-void SkipLayerNormPluginDynamic::serialize(void* buffer) const
+void SkipLayerNormPluginDynamic::serialize(void* buffer) const noexcept
 {
     serialize_value(&buffer, mType);
     serialize_value(&buffer, mCfgType);
@@ -346,22 +346,22 @@ void SkipLayerNormPluginDynamic::serialize(void* buffer) const
     }
 }
 
-void SkipLayerNormPluginDynamic::destroy()
+void SkipLayerNormPluginDynamic::destroy() noexcept
 {
     gLogVerbose << "SkipLayerNormPluginDynamic destroy\n";
     // This gets called when the network containing plugin is destroyed
-    mGammaDev.release();
-    mBetaDev.release();
-    mBiasDev.release();
+    mGammaDev.reset(nullptr);
+    mBetaDev.reset(nullptr);
+    mBiasDev.reset(nullptr);
     delete this;
 }
 
-void SkipLayerNormPluginDynamic::setPluginNamespace(const char* libNamespace)
+void SkipLayerNormPluginDynamic::setPluginNamespace(const char* libNamespace) noexcept
 {
     mNamespace = libNamespace;
 }
 
-const char* SkipLayerNormPluginDynamic::getPluginNamespace() const
+const char* SkipLayerNormPluginDynamic::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
@@ -374,104 +374,120 @@ SkipLayerNormPluginDynamicCreator::SkipLayerNormPluginDynamicCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* SkipLayerNormPluginDynamicCreator::getPluginName() const
+const char* SkipLayerNormPluginDynamicCreator::getPluginName() const noexcept
 {
     return SKIP_LAYER_NORM_NAME;
 }
 
-const char* SkipLayerNormPluginDynamicCreator::getPluginVersion() const
+const char* SkipLayerNormPluginDynamicCreator::getPluginVersion() const noexcept
 {
     return SKIP_LAYER_NORM_VERSION;
 }
 
-const PluginFieldCollection* SkipLayerNormPluginDynamicCreator::getFieldNames()
+const PluginFieldCollection* SkipLayerNormPluginDynamicCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2* SkipLayerNormPluginDynamicCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
+IPluginV2* SkipLayerNormPluginDynamicCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
-    gLogVerbose << "SkipLayerNormPluginDynamicCreator createPlugin\n";
-
-    int ld = 0;
-    Weights beta{DataType::kFLOAT, nullptr, 0};
-    Weights gamma{DataType::kFLOAT, nullptr, 0};
-    Weights bias{DataType::kFLOAT, nullptr, 0};
-    int typeId = -1;
-
-    for (int i = 0; i < fc->nbFields; i++)
+    try
     {
-        std::string field_name(fc->fields[i].name);
-        if (field_name.compare("ld") == 0)
+        gLogVerbose << "SkipLayerNormPluginDynamicCreator createPlugin\n";
+
+        int ld = 0;
+        Weights beta{DataType::kFLOAT, nullptr, 0};
+        Weights gamma{DataType::kFLOAT, nullptr, 0};
+        Weights bias{DataType::kFLOAT, nullptr, 0};
+        int typeId = -1;
+
+        for (int i = 0; i < fc->nbFields; i++)
         {
-            ld = *static_cast<const int*>(fc->fields[i].data);
-            gLogVerbose << "Building ld: " << ld << std::endl;
+            std::string field_name(fc->fields[i].name);
+            if (field_name.compare("ld") == 0)
+            {
+                ld = *static_cast<const int*>(fc->fields[i].data);
+                gLogVerbose << "Building ld: " << ld << std::endl;
+            }
+
+            if (field_name.compare("type_id") == 0)
+            {
+                typeId = *static_cast<const int*>(fc->fields[i].data);
+                gLogVerbose << "Building typeId: " << typeId << std::endl;
+            }
+
+            if (field_name.compare("beta") == 0)
+            {
+                gLogVerbose << "Building beta...\n";
+                beta.values = fc->fields[i].data;
+                beta.count = fc->fields[i].length;
+                beta.type = fieldTypeToDataType(fc->fields[i].type);
+            }
+
+            if (field_name.compare("gamma") == 0)
+            {
+                gLogVerbose << "Building gamma...\n";
+                gamma.values = fc->fields[i].data;
+                gamma.count = fc->fields[i].length;
+                gamma.type = fieldTypeToDataType(fc->fields[i].type);
+            }
+
+            if (field_name.compare("bias") == 0)
+            {
+                gLogVerbose << "Building bias...\n";
+                bias.values = fc->fields[i].data;
+                bias.count = fc->fields[i].length;
+                bias.type = fieldTypeToDataType(fc->fields[i].type);
+            }
+        }
+        gLogVerbose << "Type " << typeId << std::endl;
+
+        if (typeId < 0 || typeId > 3)
+        {
+            gLogError << "SkipLayerNorm: Invalid type ID: " << typeId << std::endl;
         }
 
-        if (field_name.compare("type_id") == 0)
+        if (beta.count <= 0 || beta.values == nullptr)
         {
-            typeId = *static_cast<const int*>(fc->fields[i].data);
-            gLogVerbose << "Building typeId: " << typeId << std::endl;
+            gLogError << "SkipLayerNorm: invalid beta" << std::endl;
         }
 
-        if (field_name.compare("beta") == 0)
+        if (gamma.count <= 0 || gamma.values == nullptr)
         {
-            gLogVerbose << "Building beta...\n";
-            beta.values = fc->fields[i].data;
-            beta.count = fc->fields[i].length;
-            beta.type = fieldTypeToDataType(fc->fields[i].type);
+            gLogError << "SkipLayerNorm: invalid gamma" << std::endl;
         }
 
-        if (field_name.compare("gamma") == 0)
-        {
-            gLogVerbose << "Building gamma...\n";
-            gamma.values = fc->fields[i].data;
-            gamma.count = fc->fields[i].length;
-            gamma.type = fieldTypeToDataType(fc->fields[i].type);
-        }
-
-        if (field_name.compare("bias") == 0)
-        {
-            gLogVerbose << "Building bias...\n";
-            bias.values = fc->fields[i].data;
-            bias.count = fc->fields[i].length;
-            bias.type = fieldTypeToDataType(fc->fields[i].type);
-        }
+        return new SkipLayerNormPluginDynamic(name, static_cast<DataType>(typeId), ld, beta, gamma, bias);
     }
-    gLogVerbose << "Type " << typeId << std::endl;
-
-    if (typeId < 0 || typeId > 3)
+    catch (const std::exception& e)
     {
-        gLogError << "SkipLayerNorm: Invalid type ID: " << typeId << std::endl;
+        caughtError(e);
     }
-
-    if (beta.count <= 0 || beta.values == nullptr)
-    {
-        gLogError << "SkipLayerNorm: invalid beta" << std::endl;
-    }
-
-    if (gamma.count <= 0 || gamma.values == nullptr)
-    {
-        gLogError << "SkipLayerNorm: invalid gamma" << std::endl;
-    }
-
-    return new SkipLayerNormPluginDynamic(name, static_cast<DataType>(typeId), ld, beta, gamma, bias);
+    return nullptr;
 }
 
 IPluginV2* SkipLayerNormPluginDynamicCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength)
+    const char* name, const void* serialData, size_t serialLength) noexcept
 {
     // This object will be deleted when the network is destroyed, which will
     // call SkipLayerNormPluginDynamic::destroy()
-    return new SkipLayerNormPluginDynamic(name, serialData, serialLength);
+    try
+    {
+        return new SkipLayerNormPluginDynamic(name, serialData, serialLength);
+    }
+    catch (const std::exception& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
-void SkipLayerNormPluginDynamicCreator::setPluginNamespace(const char* libNamespace)
+void SkipLayerNormPluginDynamicCreator::setPluginNamespace(const char* libNamespace) noexcept
 {
     mNamespace = libNamespace;
 }
 
-const char* SkipLayerNormPluginDynamicCreator::getPluginNamespace() const
+const char* SkipLayerNormPluginDynamicCreator::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
@@ -533,18 +549,18 @@ SkipLayerNormVarSeqlenPlugin::SkipLayerNormVarSeqlenPlugin(const std::string nam
 }
 
 // IPluginV2DynamicExt Methods
-IPluginV2DynamicExt* SkipLayerNormVarSeqlenPlugin::clone() const
+IPluginV2DynamicExt* SkipLayerNormVarSeqlenPlugin::clone() const noexcept
 {
     gLogVerbose << "SkipLayerNormVarSeqlenPlugin clone\n";
 
-    auto p = new SkipLayerNormVarSeqlenPlugin(mLayerName, mType, mBeta, mGamma, mBias);
+    auto* p = new SkipLayerNormVarSeqlenPlugin(mLayerName, mType, mBeta, mGamma, mBias);
     p->initialize();
     p->setPluginNamespace(mNamespace.c_str());
     return p;
 }
 
 DimsExprs SkipLayerNormVarSeqlenPlugin::getOutputDimensions(
-    int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder)
+    int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder) noexcept
 {
     assert(nbInputs == 2);
     assert(outputIndex == 0);
@@ -553,7 +569,7 @@ DimsExprs SkipLayerNormVarSeqlenPlugin::getOutputDimensions(
 }
 
 bool SkipLayerNormVarSeqlenPlugin::supportsFormatCombination(
-    int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs)
+    int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept
 {
     assert(nbInputs == 2);
     assert(nbOutputs == 1);
@@ -589,23 +605,8 @@ bool SkipLayerNormVarSeqlenPlugin::supportsFormatCombination(
     return in.format == prev.format;
 }
 
-void SkipLayerNormVarSeqlenPlugin::copyParamToDevice()
-{
-    if (!mParamsOnDevice)
-    {
-        const auto paramType = getParamWordType(mCfgType);
-        copyToDevice(mGamma, getWeightsSize(mGamma, paramType), mGammaDev);
-        copyToDevice(mBeta, getWeightsSize(mBeta, paramType), mBetaDev);
-        if (mHasBias)
-        {
-            copyToDevice(mBias, getWeightsSize(mBias, paramType), mBiasDev);
-        }
-        mParamsOnDevice = true;
-    }
-}
-
 void SkipLayerNormVarSeqlenPlugin::configurePlugin(
-    const DynamicPluginTensorDesc* inputs, int nbInputs, const DynamicPluginTensorDesc* outputs, int nbOutputs)
+    const DynamicPluginTensorDesc* inputs, int nbInputs, const DynamicPluginTensorDesc* outputs, int nbOutputs) noexcept
 {
     // Validate input arguments
     assert(nbOutputs == 1);
@@ -632,40 +633,46 @@ void SkipLayerNormVarSeqlenPlugin::configurePlugin(
     const auto paramType = getParamWordType(mCfgType);
     mParamWordsize = getElementSize(paramType);
 
-    copyParamToDevice();
+    if (!mParamsOnDevice)
+    {
+        copyToDevice(mGamma, getWeightsSize(mGamma, paramType), mGammaDev);
+        copyToDevice(mBeta, getWeightsSize(mBeta, paramType), mBetaDev);
+        if (mHasBias)
+        {
+            copyToDevice(mBias, getWeightsSize(mBias, paramType), mBiasDev);
+        }
+        mParamsOnDevice = true;
+    }
 }
 
 size_t SkipLayerNormVarSeqlenPlugin::getWorkspaceSize(
-    const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const
+    const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const noexcept
 {
     return 0;
 }
 
 int SkipLayerNormVarSeqlenPlugin::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
-    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream)
+    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     const int inputVolume = volume(inputDesc[0].dims);
     assert(inputVolume % mLd == 0 && "inconsistent dimensions");
     int status = -1;
     DataType iType = inputDesc->type;
 
-    // WAR to work with TRT6.0
-    copyParamToDevice();
-
     // Our plugin outputs only one tensor
     // Launch CUDA kernel wrapper and save its return value
     if (iType == DataType::kFLOAT)
     {
-        const auto input = static_cast<const float*>(inputs[0]);
-        const auto skip = static_cast<const float*>(inputs[1]);
-        auto output = static_cast<float*>(outputs[0]);
-        const auto bias = static_cast<const float*>(mBiasDev.get());
-        const auto beta = static_cast<const float*>(mBetaDev.get());
-        const auto gamma = static_cast<const float*>(mGammaDev.get());
+        const auto* const input = static_cast<const float*>(inputs[0]);
+        const auto* const skip = static_cast<const float*>(inputs[1]);
+        auto* output = static_cast<float*>(outputs[0]);
+        const auto* const bias = static_cast<const float*>(mBiasDev.get());
+        const auto* const beta = static_cast<const float*>(mBetaDev.get());
+        const auto* const gamma = static_cast<const float*>(mGammaDev.get());
         if (mHasBias)
         {
-            status
-                = computeSkipLayerNorm<float, true>(stream, static_cast<int>(mLd), inputVolume, input, skip, beta, gamma, output, bias);
+            status = computeSkipLayerNorm<float, true>(
+                stream, static_cast<int>(mLd), inputVolume, input, skip, beta, gamma, output, bias);
         }
         else
         {
@@ -675,15 +682,16 @@ int SkipLayerNormVarSeqlenPlugin::enqueue(const PluginTensorDesc* inputDesc, con
     }
     else if (iType == DataType::kHALF)
     {
-        const auto input = static_cast<const half*>(inputs[0]);
-        const auto skip = static_cast<const half*>(inputs[1]);
-        auto output = static_cast<half*>(outputs[0]);
-        const auto bias = static_cast<const half*>(mBiasDev.get());
-        const auto beta = static_cast<const half*>(mBetaDev.get());
-        const auto gamma = static_cast<const half*>(mGammaDev.get());
+        const auto* const input = static_cast<const half*>(inputs[0]);
+        const auto* const skip = static_cast<const half*>(inputs[1]);
+        auto* output = static_cast<half*>(outputs[0]);
+        const auto* const bias = static_cast<const half*>(mBiasDev.get());
+        const auto* const beta = static_cast<const half*>(mBetaDev.get());
+        const auto* const gamma = static_cast<const half*>(mGammaDev.get());
         if (mHasBias)
         {
-            status = computeSkipLayerNorm<half, true>(stream, static_cast<int>(mLd), inputVolume, input, skip, beta, gamma, output, bias);
+            status = computeSkipLayerNorm<half, true>(
+                stream, static_cast<int>(mLd), inputVolume, input, skip, beta, gamma, output, bias);
         }
         else
         {
@@ -695,17 +703,17 @@ int SkipLayerNormVarSeqlenPlugin::enqueue(const PluginTensorDesc* inputDesc, con
     {
         const float dqScaleIn = inputDesc[0].scale;
         const float dqScaleSkip = inputDesc[1].scale;
-        const float qScale = 1.f / outputDesc[0].scale;
-        const auto input = static_cast<const int8_t*>(inputs[0]);
-        const auto skip = static_cast<const int8_t*>(inputs[1]);
-        auto output = static_cast<int8_t*>(outputs[0]);
-        const auto bias = static_cast<const half*>(mBiasDev.get());
-        const auto beta = static_cast<const half*>(mBetaDev.get());
-        const auto gamma = static_cast<const half*>(mGammaDev.get());
+        const float qScale = 1.F / outputDesc[0].scale;
+        const auto* const input = static_cast<const int8_t*>(inputs[0]);
+        const auto* const skip = static_cast<const int8_t*>(inputs[1]);
+        auto* output = static_cast<int8_t*>(outputs[0]);
+        const auto* const bias = static_cast<const half*>(mBiasDev.get());
+        const auto* const beta = static_cast<const half*>(mBetaDev.get());
+        const auto* const gamma = static_cast<const half*>(mGammaDev.get());
         if (mHasBias)
         {
-            status = computeSkipLayerNormDQQ<true>(
-                stream, static_cast<int>(mLd), inputVolume, input, skip, beta, gamma, output, bias, dqScaleIn, dqScaleSkip, qScale);
+            status = computeSkipLayerNormDQQ<true>(stream, static_cast<int>(mLd), inputVolume, input, skip, beta, gamma,
+                output, bias, dqScaleIn, dqScaleSkip, qScale);
         }
         else
         {
@@ -722,7 +730,7 @@ int SkipLayerNormVarSeqlenPlugin::enqueue(const PluginTensorDesc* inputDesc, con
 }
 
 // IPluginV2Ext Methods
-DataType SkipLayerNormVarSeqlenPlugin::getOutputDataType(int index, const DataType* inputTypes, int nbInputs) const
+DataType SkipLayerNormVarSeqlenPlugin::getOutputDataType(int index, const DataType* inputTypes, int nbInputs) const noexcept
 {
     assert(index == 0);
     assert(nbInputs == 2);
@@ -730,38 +738,38 @@ DataType SkipLayerNormVarSeqlenPlugin::getOutputDataType(int index, const DataTy
 }
 
 // IPluginV2 Methods
-const char* SkipLayerNormVarSeqlenPlugin::getPluginType() const
+const char* SkipLayerNormVarSeqlenPlugin::getPluginType() const noexcept
 {
     return SKIP_LAYER_NORM_NAME;
 }
 
-const char* SkipLayerNormVarSeqlenPlugin::getPluginVersion() const
+const char* SkipLayerNormVarSeqlenPlugin::getPluginVersion() const noexcept
 {
     return SKIP_LAYER_NORM_VAR_SEQLEN_VERSION;
 }
 
-int SkipLayerNormVarSeqlenPlugin::getNbOutputs() const
+int SkipLayerNormVarSeqlenPlugin::getNbOutputs() const noexcept
 {
     return 1;
 }
-int SkipLayerNormVarSeqlenPlugin::initialize()
+int SkipLayerNormVarSeqlenPlugin::initialize() noexcept
 {
     gLogVerbose << "SkipLayerNormVarSeqlenPlugin initialize\n";
     return 0;
 }
 
-void SkipLayerNormVarSeqlenPlugin::terminate()
+void SkipLayerNormVarSeqlenPlugin::terminate() noexcept
 {
     gLogVerbose << "SkipLayerNormVarSeqlenPlugin terminate\n";
 }
 
-size_t SkipLayerNormVarSeqlenPlugin::getSerializationSize() const
+size_t SkipLayerNormVarSeqlenPlugin::getSerializationSize() const noexcept
 {
     const size_t biasSize = mHasBias ? (mLd * mParamWordsize) : 0;
     return 2 * mParamWordsize * mLd + 2 * sizeof(DataType) + sizeof(mLd) + biasSize + sizeof(mHasBias);
 }
 
-void SkipLayerNormVarSeqlenPlugin::serialize(void* buffer) const
+void SkipLayerNormVarSeqlenPlugin::serialize(void* buffer) const noexcept
 {
     serialize_value(&buffer, mType);
     serialize_value(&buffer, mCfgType);
@@ -777,22 +785,22 @@ void SkipLayerNormVarSeqlenPlugin::serialize(void* buffer) const
     }
 }
 
-void SkipLayerNormVarSeqlenPlugin::destroy()
+void SkipLayerNormVarSeqlenPlugin::destroy() noexcept
 {
     gLogVerbose << "SkipLayerNormVarSeqlenPlugin destroy\n";
     // This gets called when the network containing plugin is destroyed
-    mGammaDev.release();
-    mBetaDev.release();
-    mBiasDev.release();
+    mGammaDev.reset(nullptr);
+    mBetaDev.reset(nullptr);
+    mBiasDev.reset(nullptr);
     delete this;
 }
 
-void SkipLayerNormVarSeqlenPlugin::setPluginNamespace(const char* libNamespace)
+void SkipLayerNormVarSeqlenPlugin::setPluginNamespace(const char* libNamespace) noexcept
 {
     mNamespace = libNamespace;
 }
 
-const char* SkipLayerNormVarSeqlenPlugin::getPluginNamespace() const
+const char* SkipLayerNormVarSeqlenPlugin::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
@@ -805,98 +813,114 @@ SkipLayerNormVarSeqlenPluginCreator::SkipLayerNormVarSeqlenPluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* SkipLayerNormVarSeqlenPluginCreator::getPluginName() const
+const char* SkipLayerNormVarSeqlenPluginCreator::getPluginName() const noexcept
 {
     return SKIP_LAYER_NORM_NAME;
 }
 
-const char* SkipLayerNormVarSeqlenPluginCreator::getPluginVersion() const
+const char* SkipLayerNormVarSeqlenPluginCreator::getPluginVersion() const noexcept
 {
     return SKIP_LAYER_NORM_VAR_SEQLEN_VERSION;
 }
 
-const PluginFieldCollection* SkipLayerNormVarSeqlenPluginCreator::getFieldNames()
+const PluginFieldCollection* SkipLayerNormVarSeqlenPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2* SkipLayerNormVarSeqlenPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
+IPluginV2* SkipLayerNormVarSeqlenPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
-    gLogVerbose << "SkipLayerNormVarSeqlenPluginCreator createPlugin\n";
-
-    Weights beta{DataType::kFLOAT, nullptr, 0};
-    Weights gamma{DataType::kFLOAT, nullptr, 0};
-    Weights bias{DataType::kFLOAT, nullptr, 0};
-    int typeId = -1;
-
-    for (int i = 0; i < fc->nbFields; i++)
+    try
     {
-        std::string field_name(fc->fields[i].name);
+        gLogVerbose << "SkipLayerNormVarSeqlenPluginCreator createPlugin\n";
 
-        if (field_name.compare("type_id") == 0)
+        Weights beta{DataType::kFLOAT, nullptr, 0};
+        Weights gamma{DataType::kFLOAT, nullptr, 0};
+        Weights bias{DataType::kFLOAT, nullptr, 0};
+        int typeId = -1;
+
+        for (int i = 0; i < fc->nbFields; i++)
         {
-            typeId = *static_cast<const int*>(fc->fields[i].data);
-            gLogVerbose << "Building typeId: " << typeId << std::endl;
+            std::string field_name(fc->fields[i].name);
+
+            if (field_name.compare("type_id") == 0)
+            {
+                typeId = *static_cast<const int*>(fc->fields[i].data);
+                gLogVerbose << "Building typeId: " << typeId << std::endl;
+            }
+
+            if (field_name.compare("beta") == 0)
+            {
+                gLogVerbose << "Building beta...\n";
+                beta.values = fc->fields[i].data;
+                beta.count = fc->fields[i].length;
+                beta.type = fieldTypeToDataType(fc->fields[i].type);
+            }
+
+            if (field_name.compare("gamma") == 0)
+            {
+                gLogVerbose << "Building gamma...\n";
+                gamma.values = fc->fields[i].data;
+                gamma.count = fc->fields[i].length;
+                gamma.type = fieldTypeToDataType(fc->fields[i].type);
+            }
+
+            if (field_name.compare("bias") == 0)
+            {
+                gLogVerbose << "Building bias...\n";
+                bias.values = fc->fields[i].data;
+                bias.count = fc->fields[i].length;
+                bias.type = fieldTypeToDataType(fc->fields[i].type);
+            }
+        }
+        gLogVerbose << "Type " << typeId << std::endl;
+
+        if (typeId < 0 || typeId > 3)
+        {
+            gLogError << "SkipLayerNorm: Invalid type ID: " << typeId << std::endl;
         }
 
-        if (field_name.compare("beta") == 0)
+        if (beta.count <= 0 || beta.values == nullptr)
         {
-            gLogVerbose << "Building beta...\n";
-            beta.values = fc->fields[i].data;
-            beta.count = fc->fields[i].length;
-            beta.type = fieldTypeToDataType(fc->fields[i].type);
+            gLogError << "SkipLayerNorm: invalid beta" << std::endl;
         }
 
-        if (field_name.compare("gamma") == 0)
+        if (gamma.count <= 0 || gamma.values == nullptr)
         {
-            gLogVerbose << "Building gamma...\n";
-            gamma.values = fc->fields[i].data;
-            gamma.count = fc->fields[i].length;
-            gamma.type = fieldTypeToDataType(fc->fields[i].type);
+            gLogError << "SkipLayerNorm: invalid gamma" << std::endl;
         }
 
-        if (field_name.compare("bias") == 0)
-        {
-            gLogVerbose << "Building bias...\n";
-            bias.values = fc->fields[i].data;
-            bias.count = fc->fields[i].length;
-            bias.type = fieldTypeToDataType(fc->fields[i].type);
-        }
+        return new SkipLayerNormVarSeqlenPlugin(name, static_cast<DataType>(typeId), beta, gamma, bias);
     }
-    gLogVerbose << "Type " << typeId << std::endl;
-
-    if (typeId < 0 || typeId > 3)
+    catch (const std::exception& e)
     {
-        gLogError << "SkipLayerNorm: Invalid type ID: " << typeId << std::endl;
+        caughtError(e);
     }
-
-    if (beta.count <= 0 || beta.values == nullptr)
-    {
-        gLogError << "SkipLayerNorm: invalid beta" << std::endl;
-    }
-
-    if (gamma.count <= 0 || gamma.values == nullptr)
-    {
-        gLogError << "SkipLayerNorm: invalid gamma" << std::endl;
-    }
-
-    return new SkipLayerNormVarSeqlenPlugin(name, static_cast<DataType>(typeId), beta, gamma, bias);
+    return nullptr;
 }
 
 IPluginV2* SkipLayerNormVarSeqlenPluginCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength)
+    const char* name, const void* serialData, size_t serialLength) noexcept
 {
     // This object will be deleted when the network is destroyed, which will
     // call SkipLayerNormVarSeqlenPlugin::destroy()
-    return new SkipLayerNormVarSeqlenPlugin(name, serialData, serialLength);
+    try
+    {
+        return new SkipLayerNormVarSeqlenPlugin(name, serialData, serialLength);
+    }
+    catch (const std::exception& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
-void SkipLayerNormVarSeqlenPluginCreator::setPluginNamespace(const char* libNamespace)
+void SkipLayerNormVarSeqlenPluginCreator::setPluginNamespace(const char* libNamespace) noexcept
 {
     mNamespace = libNamespace;
 }
 
-const char* SkipLayerNormVarSeqlenPluginCreator::getPluginNamespace() const
+const char* SkipLayerNormVarSeqlenPluginCreator::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }

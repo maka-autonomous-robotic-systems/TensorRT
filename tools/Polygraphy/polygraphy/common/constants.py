@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,9 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-DEFAULT_SHAPE_VALUE = 1
-DEFAULT_SEED = 1
+from polygraphy import mod
+from polygraphy.constants import *
 
-TAB = " " * 4 # The one true tab
-
-MARK_ALL = "mark-all"
+mod.warn_deprecated("polygraphy.common.constants", "polygraphy.constants", remove_in="0.32.0")

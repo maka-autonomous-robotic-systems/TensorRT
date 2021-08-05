@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -112,7 +112,7 @@ def main():
     args = parser.parse_args()
 
     metrics = args.metrics.split(',')
-    count = args.gp and (not hasTimestamp(metricts) or len(metrics) == 1)
+    count = args.gp and (not hasTimestamp(metrics) or len(metrics) == 1)
 
     if not args.no_header:
         pu.printHeader(allMetrics, metrics, args.gp, count)

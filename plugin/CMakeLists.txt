@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,6 +35,7 @@ set(PLUGIN_LISTS
     coordConvACPlugin
     cropAndResizePlugin
     detectionLayerPlugin
+    efficientNMSPlugin
     flattenConcat
     generateDetectionPlugin
     gridAnchorPlugin
@@ -53,6 +54,7 @@ set(PLUGIN_LISTS
     regionPlugin
     reorgPlugin
     resizeNearestPlugin
+    scatterPlugin
     specialSlicePlugin
     splitPlugin
     )
@@ -70,7 +72,7 @@ if(BERT_GENCODES)
         )
 endif()
 
-include_directories(common common/kernels ../samples/common)
+include_directories(common common/kernels ${CMAKE_SOURCE_DIR}/samples/common)
 
 foreach(PLUGIN_ITER ${PLUGIN_LISTS})
     include_directories(${PLUGIN_ITER})

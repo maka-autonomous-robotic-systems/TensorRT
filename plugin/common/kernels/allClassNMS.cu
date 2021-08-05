@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,22 +15,23 @@
  */
 #include "kernel.h"
 #include "bboxUtils.h"
+#include "cuda_fp16.h"
 #include <array>
 
 template <typename T_BBOX>
-__device__ T_BBOX bboxSize(
+__device__ float bboxSize(
     const Bbox<T_BBOX>& bbox,
     const bool normalized)
 {
-    if (bbox.xmax < bbox.xmin || bbox.ymax < bbox.ymin)
+    if (float(bbox.xmax) < float(bbox.xmin) || float(bbox.ymax) < float(bbox.ymin))
     {
         // If bbox is invalid (e.g. xmax < xmin or ymax < ymin), return 0.
         return 0;
     }
     else
     {
-        T_BBOX width = bbox.xmax - bbox.xmin;
-        T_BBOX height = bbox.ymax - bbox.ymin;
+        float width = float(bbox.xmax) - float(bbox.xmin);
+        float height = float(bbox.ymax) - float(bbox.ymin);
         if (normalized)
         {
             return width * height;
@@ -38,7 +39,7 @@ __device__ T_BBOX bboxSize(
         else
         {
             // If bbox is not within range [0, 1].
-            return (width + 1) * (height + 1);
+            return (width + 1.f) * (height + 1.f);
         }
     }
 }
@@ -67,6 +68,33 @@ __device__ void intersectBbox(
 }
 
 
+template <>
+__device__ void intersectBbox<__half>(
+    const Bbox<__half>& bbox1,
+    const Bbox<__half>& bbox2,
+    Bbox<__half>* intersect_bbox)
+{
+    if (float(bbox2.xmin) > float(bbox1.xmax)
+        || float(bbox2.xmax) < float(bbox1.xmin)
+        || float(bbox2.ymin) > float(bbox1.ymax)
+        || float(bbox2.ymax) < float(bbox1.ymin))
+    {
+        // Return [0, 0, 0, 0] if there is no intersection.
+        intersect_bbox->xmin = __half(0);
+        intersect_bbox->ymin = __half(0);
+        intersect_bbox->xmax = __half(0);
+        intersect_bbox->ymax = __half(0);
+    }
+    else
+    {
+        intersect_bbox->xmin = max(float(bbox1.xmin), float(bbox2.xmin));
+        intersect_bbox->ymin = max(float(bbox1.ymin), float(bbox2.ymin));
+        intersect_bbox->xmax = min(float(bbox1.xmax), float(bbox2.xmax));
+        intersect_bbox->ymax = min(float(bbox1.ymax), float(bbox2.ymax));
+    }
+}
+
+
 template <typename T_BBOX>
 __device__ Bbox<T_BBOX> getDiagonalMinMaxSortedBox(const Bbox<T_BBOX>& bbox1)
 {
@@ -76,6 +104,18 @@ __device__ Bbox<T_BBOX> getDiagonalMinMaxSortedBox(const Bbox<T_BBOX>& bbox1)
 
     result.ymin = min(bbox1.ymin, bbox1.ymax);
     result.ymax = max(bbox1.ymin, bbox1.ymax);
+    return result;
+}
+
+template <>
+__device__ Bbox<__half> getDiagonalMinMaxSortedBox(const Bbox<__half>& bbox1)
+{
+    Bbox<__half> result;
+    result.xmin = min(float(bbox1.xmin), float(bbox1.xmax));
+    result.xmax = max(float(bbox1.xmin), float(bbox1.xmax));
+
+    result.ymin = min(float(bbox1.ymin), float(bbox1.ymax));
+    result.ymax = max(float(bbox1.ymin), float(bbox1.ymax));
     return result;
 }
 
@@ -94,13 +134,13 @@ __device__ float jaccardOverlap(
     float intersect_width, intersect_height;
     if (normalized)
     {
-        intersect_width = intersect_bbox.xmax - intersect_bbox.xmin;
-        intersect_height = intersect_bbox.ymax - intersect_bbox.ymin;
+        intersect_width = float(intersect_bbox.xmax) - float(intersect_bbox.xmin);
+        intersect_height = float(intersect_bbox.ymax) - float(intersect_bbox.ymin);
     }
     else
     {
-        intersect_width = intersect_bbox.xmax - intersect_bbox.xmin + 1;
-        intersect_height = intersect_bbox.ymax - intersect_bbox.ymin + 1;
+        intersect_width = float(intersect_bbox.xmax) - float(intersect_bbox.xmin) + float(T_BBOX(1));
+        intersect_height = float(intersect_bbox.ymax) - float(intersect_bbox.ymin) + float(T_BBOX(1));
     }
     if (intersect_width > 0 && intersect_height > 0)
     {
@@ -140,7 +180,8 @@ __global__ void allClassNMS_kernel(
     int* beforeNMS_index_array,
     T_SCORE* afterNMS_scores,
     int* afterNMS_index_array,
-    bool flipXY = false)
+    bool flipXY,
+    const float score_shift)
 {
     //__shared__ bool kept_bboxinfo_flag[CAFFE_CUDA_NUM_THREADS * TSIZE];
     extern __shared__ bool kept_bboxinfo_flag[];
@@ -172,14 +213,10 @@ __global__ void allClassNMS_kernel(
                 {
                     const int bbox_data_idx = share_location ? (loc_bboxIndex[t] % num_preds_per_class + bbox_idx_offset) : loc_bboxIndex[t];
 
-                    loc_bbox[t].xmin = flipXY ? bbox_data[bbox_data_idx * 4 + 1]
-                      : bbox_data[bbox_data_idx * 4 + 0];
-                    loc_bbox[t].ymin = flipXY ? bbox_data[bbox_data_idx * 4 + 0]
-                      : bbox_data[bbox_data_idx * 4 + 1];
-                    loc_bbox[t].xmax = flipXY ? bbox_data[bbox_data_idx * 4 + 3]
-                      : bbox_data[bbox_data_idx * 4 + 2];
-                    loc_bbox[t].ymax = flipXY ? bbox_data[bbox_data_idx * 4 + 2]
-                      : bbox_data[bbox_data_idx * 4 + 3];
+                    loc_bbox[t].xmin = flipXY ? bbox_data[bbox_data_idx * 4 + 1] : bbox_data[bbox_data_idx * 4 + 0];
+                    loc_bbox[t].ymin = flipXY ? bbox_data[bbox_data_idx * 4 + 0] : bbox_data[bbox_data_idx * 4 + 1];
+                    loc_bbox[t].xmax = flipXY ? bbox_data[bbox_data_idx * 4 + 3] : bbox_data[bbox_data_idx * 4 + 2];
+                    loc_bbox[t].ymax = flipXY ? bbox_data[bbox_data_idx * 4 + 2] : bbox_data[bbox_data_idx * 4 + 3];
                     kept_bboxinfo_flag[cur_idx] = true;
                 }
                 else
@@ -245,7 +282,7 @@ __global__ void allClassNMS_kernel(
              */
             if (read_item_idx < max_idx)
             {
-                afterNMS_scores[write_item_idx] = kept_bboxinfo_flag[cur_idx] ? beforeNMS_scores[read_item_idx] : 0.0f;
+                afterNMS_scores[write_item_idx] = kept_bboxinfo_flag[cur_idx] ? T_SCORE(beforeNMS_scores[read_item_idx]) : T_SCORE(score_shift);
                 afterNMS_index_array[write_item_idx] = kept_bboxinfo_flag[cur_idx] ? loc_bboxIndex[t] : -1;
             }
         }
@@ -267,13 +304,14 @@ pluginStatus_t allClassNMS_gpu(
     void* beforeNMS_index_array,
     void* afterNMS_scores,
     void* afterNMS_index_array,
-    bool flipXY = false)
+    bool flipXY,
+    const float score_shift)
 {
 #define P(tsize) allClassNMS_kernel<T_SCORE, T_BBOX, (tsize)>
 
     void (*kernel[8])(const int, const int, const int, const int, const float,
-                      const bool, const bool, float*, T_SCORE*, int*, T_SCORE*,
-                      int*, bool)
+                      const bool, const bool, T_BBOX*, T_SCORE*, int*, T_SCORE*,
+                      int*, bool, const float)
         = {
             P(1), P(2), P(3), P(4), P(5), P(6), P(7), P(8),
         };
@@ -289,7 +327,8 @@ pluginStatus_t allClassNMS_gpu(
                                                                        (int*) beforeNMS_index_array,
                                                                        (T_SCORE*) afterNMS_scores,
                                                                        (int*) afterNMS_index_array,
-                                                                       flipXY);
+                                                                       flipXY,
+                                                                       score_shift);
 
     CSC(cudaGetLastError(), STATUS_FAILURE);
     return STATUS_SUCCESS;
@@ -309,7 +348,8 @@ typedef pluginStatus_t (*nmsFunc)(cudaStream_t,
                                void*,
                                void*,
                                void*,
-                               bool);
+                               bool,
+                               const float);
 
 struct nmsLaunchConfigSSD
 {
@@ -334,8 +374,10 @@ struct nmsLaunchConfigSSD
     }
 };
 
-static std::array<nmsLaunchConfigSSD, 1> nmsSsdLCOptions = {
-    nmsLaunchConfigSSD(DataType::kFLOAT, DataType::kFLOAT, allClassNMS_gpu<float, float>)};
+static std::array<nmsLaunchConfigSSD, 2> nmsSsdLCOptions = {
+    nmsLaunchConfigSSD(DataType::kFLOAT, DataType::kFLOAT, allClassNMS_gpu<float, float>),
+    nmsLaunchConfigSSD(DataType::kHALF, DataType::kHALF, allClassNMS_gpu<__half, __half>)
+};
 
 pluginStatus_t allClassNMS(cudaStream_t stream,
                         const int num,
@@ -352,9 +394,10 @@ pluginStatus_t allClassNMS(cudaStream_t stream,
                         void* beforeNMS_index_array,
                         void* afterNMS_scores,
                         void* afterNMS_index_array,
-                        bool flipXY)
+                        bool flipXY,
+                        const float score_shift)
 {
-    nmsLaunchConfigSSD lc = nmsLaunchConfigSSD(DT_SCORE, DT_BBOX, allClassNMS_gpu<float, float>);
+    nmsLaunchConfigSSD lc = nmsLaunchConfigSSD(DT_SCORE, DT_BBOX);
     for (unsigned i = 0; i < nmsSsdLCOptions.size(); ++i)
     {
         if (lc == nmsSsdLCOptions[i])
@@ -373,7 +416,8 @@ pluginStatus_t allClassNMS(cudaStream_t stream,
                                           beforeNMS_index_array,
                                           afterNMS_scores,
                                           afterNMS_index_array,
-                                          flipXY);
+                                          flipXY,
+                                          score_shift);
         }
     }
     return STATUS_BAD_PARAM;

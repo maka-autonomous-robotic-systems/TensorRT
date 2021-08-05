@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,14 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.backend.tf import TfRunner, SessionFromGraph
-
-from tests.models.meta import TF_MODELS
-from tests.common import check_file_non_empty
-
 import tempfile
+
+import numpy as np
 import pytest
-import os
+from polygraphy.backend.tf import SessionFromGraph, TfRunner
+from polygraphy.exception import PolygraphyException
+from tests.helper import is_file_non_empty
+from tests.models.meta import TF_MODELS
 
 
 class TestTfRunner(object):
@@ -29,7 +29,6 @@ class TestTfRunner(object):
         runner = TfRunner(None, name=NAME)
         assert runner.name == NAME
 
-
     def test_basic(self):
         model = TF_MODELS["identity"]
         with TfRunner(SessionFromGraph(model.loader)) as runner:
@@ -37,11 +36,36 @@ class TestTfRunner(object):
             model.check_runner(runner)
         assert not runner.is_active
 
-
     @pytest.mark.skip(reason="Non-trivial to set up - requires CUPTI")
     def test_save_timeline(self):
         model = TF_MODELS["identity"]
         with tempfile.NamedTemporaryFile() as outpath:
             with TfRunner(SessionFromGraph(model.loader), allow_growth=True, save_timeline=outpath.name) as runner:
                 model.check_runner(runner)
-                check_file_non_empty(outpath.name)
+                assert is_file_non_empty(outpath.name)
+
+    @pytest.mark.parametrize(
+        "names, err",
+        [
+            (["fake-input", "Input:0"], "Extra keys in"),
+            (["fake-input"], "Some keys are missing"),
+            ([], "Some keys are missing"),
+        ],
+    )
+    def test_error_on_wrong_name_feed_dict(self, names, err):
+        model = TF_MODELS["identity"]
+        with TfRunner(SessionFromGraph(model.loader)) as runner:
+            with pytest.raises(PolygraphyException, match=err):
+                runner.infer({name: np.ones(shape=(1, 15, 25, 30), dtype=np.float32) for name in names})
+
+    def test_error_on_wrong_dtype_feed_dict(self):
+        model = TF_MODELS["identity"]
+        with TfRunner(SessionFromGraph(model.loader)) as runner:
+            with pytest.raises(PolygraphyException, match="unexpected dtype."):
+                runner.infer({"Input:0": np.ones(shape=(1, 15, 25, 30), dtype=np.int32)})
+
+    def test_error_on_wrong_shape_feed_dict(self):
+        model = TF_MODELS["identity"]
+        with TfRunner(SessionFromGraph(model.loader)) as runner:
+            with pytest.raises(PolygraphyException, match="incompatible shape."):
+                runner.infer({"Input:0": np.ones(shape=(1, 1, 25, 30), dtype=np.float32)})

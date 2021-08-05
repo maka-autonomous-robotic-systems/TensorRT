@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,41 @@
  */
 #include "kernel.h"
 #include "plugin.h"
+#include "cuda_fp16.h"
 #include "gatherNMSOutputs.h"
 #include <array>
+
+// __half minus with fallback to float for old sm
+inline __device__ __half minus_fb(const __half & a, const __half & b) {
+#if __CUDA_ARCH__ >= 530
+    return a - b;
+#else
+    return __float2half(__half2float(a) - __half2float(b));
+#endif
+}
+
+// overload for float
+inline __device__ float minus_fb(const float & a, const float & b) {
+    return a - b;
+}
+
+template <typename T_BBOX>
+__device__ T_BBOX saturate(T_BBOX v)
+{
+    return max(min(v, T_BBOX(1)), T_BBOX(0));
+}
+
+template <>
+__device__ __half saturate(__half v)
+{
+#if __CUDA_ARCH__ >= 800
+    return __hmax(__hmin(v, __half(1)), __half(0));
+#elif __CUDA_ARCH__ >= 530
+    return __hge(v, __half(1)) ? __half(1) : (__hle(v, __half(0)) ? __half(0) : v);
+#else
+    return max(min(v, float(1)), float(0));
+#endif
+}
 
 template <typename T_BBOX, typename T_SCORE, unsigned nthds_per_cta>
 __launch_bounds__(nthds_per_cta)
@@ -34,7 +67,8 @@ __launch_bounds__(nthds_per_cta)
         T_BBOX* nmsedBoxes,
         T_BBOX* nmsedScores,
         T_BBOX* nmsedClasses,
-        bool clipBoxes
+        bool clipBoxes,
+        const T_SCORE scoreShift
         )
 {
     if (keepTopK > topK)
@@ -64,18 +98,19 @@ __launch_bounds__(nthds_per_cta)
                         : index % (numClasses * numPredsPerClass)) + bboxOffset) * 4;
             nmsedClasses[i] = (index % (numClasses * numPredsPerClass)) / numPredsPerClass; // label
             nmsedScores[i] = score;                                                        // confidence score
+            nmsedScores[i] = minus_fb(nmsedScores[i], scoreShift);
+            const T_BBOX xMin = bboxData[bboxId];
+            const T_BBOX yMin = bboxData[bboxId + 1];
+            const T_BBOX xMax = bboxData[bboxId + 2];
+            const T_BBOX yMax = bboxData[bboxId + 3];
             // clipped bbox xmin
-            nmsedBoxes[i * 4] = clipBoxes ? max(min(bboxData[bboxId],
-                        T_BBOX(1.)), T_BBOX(0.)) : bboxData[bboxId];
+            nmsedBoxes[i * 4] = clipBoxes ? saturate(xMin) : xMin;
             // clipped bbox ymin
-            nmsedBoxes[i * 4 + 1] = clipBoxes ? max(min(bboxData[bboxId + 1],
-                        T_BBOX(1.)), T_BBOX(0.)) : bboxData[bboxId + 1];
+            nmsedBoxes[i * 4 + 1] = clipBoxes ? saturate(yMin) : yMin;
             // clipped bbox xmax
-            nmsedBoxes[i * 4 + 2] = clipBoxes ? max(min(bboxData[bboxId + 2],
-                        T_BBOX(1.)), T_BBOX(0.)) : bboxData[bboxId + 2];
+            nmsedBoxes[i * 4 + 2] = clipBoxes ? saturate(xMax) : xMax;
             // clipped bbox ymax
-            nmsedBoxes[i * 4 + 3] = clipBoxes ? max(min(bboxData[bboxId + 3],
-                        T_BBOX(1.)), T_BBOX(0.)) : bboxData[bboxId + 3];
+            nmsedBoxes[i * 4 + 3] = clipBoxes ? saturate(yMax) : yMax;
             atomicAdd(&numDetections[i / keepTopK], 1);
         }
     }
@@ -97,7 +132,8 @@ pluginStatus_t gatherNMSOutputs_gpu(
     void* nmsedBoxes,
     void* nmsedScores,
     void* nmsedClasses,
-    bool clipBoxes
+    bool clipBoxes,
+    const float scoreShift
     )
 {
     cudaMemsetAsync(numDetections, 0, numImages * sizeof(int), stream);
@@ -107,10 +143,11 @@ pluginStatus_t gatherNMSOutputs_gpu(
                                                                            numClasses, topK, keepTopK,
                                                                            (int*) indices, (T_SCORE*) scores, (T_BBOX*) bboxData,
                                                                            (int*) numDetections,
-                                                                           (T_BBOX*) nmsedBoxes, 
-                                                                           (T_BBOX*) nmsedScores, 
+                                                                           (T_BBOX*) nmsedBoxes,
+                                                                           (T_BBOX*) nmsedScores,
                                                                            (T_BBOX*) nmsedClasses,
-                                                                           clipBoxes
+                                                                           clipBoxes,
+                                                                           T_SCORE(scoreShift)
                                                                             );
 
     CSC(cudaGetLastError(), STATUS_FAILURE);
@@ -130,9 +167,10 @@ typedef pluginStatus_t (*nmsOutFunc)(cudaStream_t,
                                const void*,
                                void*,
                                void*,
-                               void*, 
                                void*,
-                               bool);
+                               void*,
+                               bool,
+                               const float);
 struct nmsOutLaunchConfig
 {
     DataType t_bbox;
@@ -158,8 +196,10 @@ struct nmsOutLaunchConfig
 
 using nvinfer1::DataType;
 
-static std::array<nmsOutLaunchConfig, 1> nmsOutLCOptions = {
-  nmsOutLaunchConfig(DataType::kFLOAT, DataType::kFLOAT, gatherNMSOutputs_gpu<float, float>)};
+static std::array<nmsOutLaunchConfig, 2> nmsOutLCOptions = {
+  nmsOutLaunchConfig(DataType::kFLOAT, DataType::kFLOAT, gatherNMSOutputs_gpu<float, float>),
+  nmsOutLaunchConfig(DataType::kHALF, DataType::kHALF, gatherNMSOutputs_gpu<__half, __half>)
+};
 
 pluginStatus_t gatherNMSOutputs(
     cudaStream_t stream,
@@ -178,7 +218,8 @@ pluginStatus_t gatherNMSOutputs(
     void* nmsedBoxes,
     void* nmsedScores,
     void* nmsedClasses,
-    bool clipBoxes
+    bool clipBoxes,
+    const float scoreShift
     )
 {
     nmsOutLaunchConfig lc = nmsOutLaunchConfig(DT_BBOX, DT_SCORE);
@@ -201,7 +242,8 @@ pluginStatus_t gatherNMSOutputs(
                                           nmsedBoxes,
                                           nmsedScores,
                                           nmsedClasses,
-                                          clipBoxes
+                                          clipBoxes,
+                                          scoreShift
                                           );
         }
     }

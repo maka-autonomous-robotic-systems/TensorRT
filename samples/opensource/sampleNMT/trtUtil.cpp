@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
+#include "common.h"
 #include "trtUtil.h"
-
-#include <cassert>
 #include <functional>
 #include <numeric>
 
@@ -28,10 +27,10 @@ int inferTypeToBytes(nvinfer1::DataType t)
     {
     case nvinfer1::DataType::kFLOAT: return sizeof(float); break;
     case nvinfer1::DataType::kHALF: return sizeof(int16_t); break;
-    default: assert(0); break;
+    default: ASSERT(0); break;
     }
     return 0;
-};
+}
 
 int getVolume(nvinfer1::Dims dims)
 {

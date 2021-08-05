@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,8 +16,8 @@
 #
 
 """
-This script uses a prebuilt TensorRT BERT QA Engine to answer a question 
-based on the provided passage. It additionally includes an interactive mode 
+This script uses a prebuilt TensorRT BERT QA Engine to answer a question
+based on the provided passage. It additionally includes an interactive mode
 where multiple questions can be asked.
 """
 
@@ -75,6 +75,9 @@ def parse_args():
     parser.add_argument('--n-best-size',
             help='Total number of n-best predictions to generate in the nbest_predictions.json output file',
             default=20, type=int)
+    parser.add_argument('--doc-stride',
+            help='When splitting up a long document into chunks, what stride to take between chunks',
+            default=128, type=int)
     args, _ = parser.parse_known_args()
     return args
 
@@ -105,7 +108,7 @@ if __name__ == '__main__':
 
     tokenizer = tokenization.FullTokenizer(vocab_file=args.vocab_file, do_lower_case=True)
     # When splitting up a long document into chunks, how much stride to take between chunks.
-    doc_stride = 128
+    doc_stride = args.doc_stride
     # The maximum total input sequence length after WordPiece tokenization.
     # Sequences longer than this will be truncated, and sequences shorter
     max_seq_length = args.sequence_length

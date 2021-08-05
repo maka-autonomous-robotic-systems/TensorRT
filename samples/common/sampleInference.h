@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,6 +36,7 @@ struct InferenceEnvironment
     std::unique_ptr<Profiler> profiler;
     std::vector<TrtUniquePtr<nvinfer1::IExecutionContext>> context;
     std::vector<std::unique_ptr<Bindings>> bindings;
+    bool error{false};
 };
 
 //!
@@ -44,10 +45,14 @@ struct InferenceEnvironment
 bool setUpInference(InferenceEnvironment& iEnv, const InferenceOptions& inference);
 
 //!
-//! \brief Run inference and collect timing
+//! \brief Deserialize the engine and time how long it takes.
 //!
-void runInference(
-    const InferenceOptions& inference, InferenceEnvironment& iEnv, int device, std::vector<InferenceTrace>& trace);
+bool timeDeserialize(InferenceEnvironment& iEnv);
+
+//!
+//! \brief Run inference and collect timing, return false if any error hit during inference
+//!
+bool runInference(const InferenceOptions& inference, InferenceEnvironment& iEnv, int device, std::vector<InferenceTrace>& trace);
 
 } // namespace sample
 

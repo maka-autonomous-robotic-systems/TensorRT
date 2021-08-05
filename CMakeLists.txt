@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -80,8 +80,8 @@ endif()
 ############################################################################################
 # Dependencies
 
-set(DEFAULT_CUDA_VERSION 11.1)
-set(DEFAULT_CUDNN_VERSION 8.0)
+set(DEFAULT_CUDA_VERSION 11.3.1)
+set(DEFAULT_CUDNN_VERSION 8.2)
 set(DEFAULT_PROTOBUF_VERSION 3.0.0)
 set(DEFAULT_CUB_VERSION 1.8.0)
 
@@ -194,4 +194,3 @@ endif()
 if(BUILD_SAMPLES)
     add_subdirectory(samples)
 endif()
-

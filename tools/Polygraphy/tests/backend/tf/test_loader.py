@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,17 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.backend.tf import GraphFromFrozen, ModifyGraph, SaveGraph
-from polygraphy.common import constants
-from polygraphy.logger import G_LOGGER
-
-from tests.models.meta import TF_MODELS
-from tests.common import check_file_non_empty
-
-import tensorflow as tf
-import tempfile
-import pytest
 import os
+import tempfile
+
+import pytest
+import tensorflow as tf
+from polygraphy import constants
+from polygraphy.backend.tf import GraphFromFrozen, ModifyGraphOutputs, SaveGraph, graph_from_frozen
+from polygraphy.logger import G_LOGGER
+from tests.helper import is_file_non_empty
+from tests.models.meta import TF_MODELS
 
 
 class TestLoggerCallbacks(object):
@@ -38,10 +37,9 @@ class TestFrozenGraphLoader(object):
             inp = tf.placeholder(shape=(1, 1, 1, 1), dtype=tf.float32)
             out = tf.identity(inp)
 
-        graph, outputs = GraphFromFrozen(graph)()
+        graph, outputs = graph_from_frozen(graph)
         assert graph
         assert outputs
-
 
     def test_load_pb(self):
         tf_loader = GraphFromFrozen(TF_MODELS["identity"].path)
@@ -51,7 +49,7 @@ class TestFrozenGraphLoader(object):
 class TestModifyGraph(object):
     def test_layerwise(self):
         load_frozen = GraphFromFrozen(TF_MODELS["identity"].path)
-        modify_tf = ModifyGraph(load_frozen, outputs=constants.MARK_ALL)
+        modify_tf = ModifyGraphOutputs(load_frozen, outputs=constants.MARK_ALL)
 
         graph, outputs = modify_tf()
         assert graph
@@ -63,8 +61,7 @@ class TestSaveGraph(object):
         with tempfile.NamedTemporaryFile() as outpath:
             tf_loader = SaveGraph(GraphFromFrozen(TF_MODELS["identity"].path), path=outpath.name)
             tf_loader()
-            check_file_non_empty(outpath.name)
-
+            assert is_file_non_empty(outpath.name)
 
     def test_save_tensorboard(self):
         with tempfile.TemporaryDirectory() as outdir:

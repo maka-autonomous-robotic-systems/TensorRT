@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,11 +24,8 @@ set(OPENSOURCE_SAMPLES_LIST
     sampleMLP
     sampleMNIST
     sampleMNISTAPI
-    sampleMovieLens
-    sampleMovieLensMPS
     sampleNMT
     sampleOnnxMNIST
-    samplePlugin
     sampleReformatFreeIO
     sampleSSD
     sampleUffFasterRCNN

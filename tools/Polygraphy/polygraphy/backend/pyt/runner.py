@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,12 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import torch
+import time
+from collections import OrderedDict
+
+from polygraphy import func, mod, util
 from polygraphy.backend.base import BaseRunner
-from polygraphy.util import misc
+
+torch = mod.lazy_import("torch")
 
 
+@mod.export()
 class PytRunner(BaseRunner):
+    """
+    Runs inference using PyTorch.
+    """
+
     def __init__(self, model, input_metadata, output_names, name=None):
         """
         Args:
@@ -39,15 +48,16 @@ class PytRunner(BaseRunner):
         self.input_metadata = input_metadata
         self.output_names = output_names
 
-
     def activate_impl(self):
-        self.model, _ = misc.try_call(self._model)
+        self.model, _ = util.invoke_if_callable(self._model)
         self.model.eval()
 
-
-    def infer(self, feed_dict):
+    def infer_impl(self, feed_dict):
         with torch.no_grad():
-            inputs = [torch.from_numpy(val.astype(dtype)).cuda() for (val, (dtype, _)) in zip(feed_dict.values(), self.input_metadata.values())]
+            inputs = [
+                torch.from_numpy(val.astype(dtype)).cuda()
+                for (val, (dtype, _)) in zip(feed_dict.values(), self.input_metadata.values())
+            ]
             start = time.time()
             outputs = self.model(*inputs)
             end = time.time()
@@ -57,6 +67,9 @@ class PytRunner(BaseRunner):
             out_dict[name] = output.cpu().numpy()
         return out_dict, end - start
 
+    def deactivate_impl(self):
+        del self.model
 
-    def get_input_metadata(self):
+    @func.constantmethod
+    def get_input_metadata_impl(self):
         return self.input_metadata
