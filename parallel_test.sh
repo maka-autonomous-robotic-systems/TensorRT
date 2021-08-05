@@ -3,7 +3,7 @@ LD_LIBRARY_PATH=./build/
 mkdir -p build
 pushd build
 cmake ../
-make
+make -j`nproc`
 popd
 
 ./build/trtexec_parallel --deploy=/usr/src/tensorrt/data/mnist/deploy.prototxt --model=/usr/src/tensorrt/data/mnist/mnist.caffemodel --output=prob --batch=16 --saveEngine=mnist16.trt --device=0
