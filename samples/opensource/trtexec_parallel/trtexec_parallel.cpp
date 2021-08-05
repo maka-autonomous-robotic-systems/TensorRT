@@ -113,7 +113,7 @@ int main(int argc, char** argv)
                 cudaSetDevice(first_device);
                 options.build.engine
                     = original_name.substr(0, original_name.size() - 4) + "_" + std::to_string(first_device) + ".trt";
-                getEngine(options.model, options.build, options.system, sample::gLogVerbose);
+                getEngineNetworkParserTuple(options.model, options.build, options.system, sample::gLogVerbose);
             }));
         futures.push_back(std::async(launch_mode,
             [&]()
@@ -121,7 +121,7 @@ int main(int argc, char** argv)
                 cudaSetDevice(second_device);
                 options.build.engine
                     = original_name.substr(0, original_name.size() - 4) + "_" + std::to_string(second_device) + ".trt";
-                getEngine(options.model, options.build, options.system, sample::gLogVerbose);
+                getEngineNetworkParserTuple(options.model, options.build, options.system, sample::gLogVerbose);
             }));
 
         for (auto& future : futures)
@@ -133,13 +133,13 @@ int main(int argc, char** argv)
     {
         options.build.engine = options.build.engine.substr(0, options.build.engine.size() - 4) + "_"
             + std::to_string(options.system.device) + ".trt";
-        getEngine(options.model, options.build, options.system, sample::gLogError);
+        getEngineNetworkParserTuple(options.model, options.build, options.system, sample::gLogError);
     }
     else
     {
         options.build.engine = options.build.engine.substr(0, options.build.engine.size() - 4) + "_"
             + std::to_string(options.system.device) + ".trt";
-        getEngine(options.model, options.build, options.system, sample::gLogError);
+        getEngineNetworkParserTuple(options.model, options.build, options.system, sample::gLogError);
     }
     return 0;
 }
