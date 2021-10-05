@@ -770,7 +770,7 @@ void bindCore(py::module& m)
         .def("create_builder_config", &IBuilder::createBuilderConfig, BuilderDoc::create_builder_config,
             py::keep_alive<0, 1>{})
         .def("build_engine", utils::deprecateMember(&IBuilder::buildEngineWithConfig, "build_serialized_network"),
-            "network"_a, "config"_a, BuilderDoc::build_engine, py::call_guard<py::gil_scoped_release>{},
+            "network"_a, "config"_a, BuilderDoc::build_engine,
             py::keep_alive<0, 1>{})
         .def("build_serialized_network", &IBuilder::buildSerializedNetwork, "network"_a, "config"_a,
             BuilderDoc::build_serialized_network, py::call_guard<py::gil_scoped_release>{})
